@@ -41,9 +41,9 @@
             body * { visibility: hidden; }
             /* Make printable area and its direct children visible */
             #printableArea, #printableArea > * { visibility: visible; }
-             /* Make contents within plot containers visible */
+             /* Make contents within plot containers */
             #printableArea .plotly-chart-container, #printableArea .plotly-chart-container * { visibility: visible; }
-            #printableArea { position: absolute; left: 0; top: 0; width: 100%; height: auto; padding: 10px; margin: 0; }
+            #printableArea { position: absolute; left: 0; top: 0; width: 100%; height: auto, padding: 10px; margin: 0; }
             .plotly-chart-container, .plotly-chart-container .plot-container, .plotly-chart-container .svg-container {
                  width: 100% !important; height: 45vh !important; min-height: 300px; page-break-inside: avoid;
             }
@@ -143,20 +143,20 @@
 
     </div>
     <script>
-        console.log("Plotter script loaded (v37 - Controls Top Layout).");
+        console.log("Plotter script loaded (v39 - Fix DLS Plot Error).");
 
         // --- DOM Elements ---
         const fileInput = document.getElementById('fileInput');
-        const plotDiv = document.getElementById('plotlyChart'); // Plot 1 container
-        const plotDiv2 = document.getElementById('plotlyChart2'); // Plot 2 container
+        const plotDiv = document.getElementById('plotlyChart');
+        const plotDiv2 = document.getElementById('plotlyChart2');
         const statusDiv = document.getElementById('status');
         const errorBox = document.getElementById('errorBox');
         const errorMessage = document.getElementById('errorMessage');
         const titleSection = document.getElementById('titleSection');
         const plotTitleInput = document.getElementById('plotTitleInput');
         const updateTitleButton = document.getElementById('updateTitleButton');
-        const htmlPlotTitle = document.getElementById('htmlPlotTitle'); // Plot 1 title
-        const htmlPlotTitle2 = document.getElementById('htmlPlotTitle2'); // Plot 2 title
+        const htmlPlotTitle = document.getElementById('htmlPlotTitle');
+        const htmlPlotTitle2 = document.getElementById('htmlPlotTitle2');
         const markerSection = document.getElementById('markerSection');
         const mdValueInput = document.getElementById('mdValueInput');
         const markerTextInput = document.getElementById('markerTextInput');
@@ -167,34 +167,33 @@
         const printButton = document.getElementById('printButton');
 
         // --- Global State ---
-        let plotInstance = null; // Plot 1 instance
-        let plotInstance2 = null; // Plot 2 instance
+        let plotInstance = null;
+        let plotInstance2 = null;
         let currentPlotData = { lineData: [], nearestPointsData: {}, dlsHighlightData: [], dlsSuperHighlightData: [], dlsRange: { min: null, max: null } };
-        let currentLayout = {}; // Plot 1 layout
-        let currentLayout2 = {}; // Plot 2 layout
+        let currentLayout = {};
+        let currentLayout2 = {};
         let lastMarkerPosition = { md: null, tvd: null };
         let lastMarkerAyOffset = -40;
         let lastAutoMarkerPosition = { md: null, tvd: null };
         let lastAutoMarkerAyOffset = -40;
+        let localSavedData = localStorage.getItem('wellCompletionData');
 
         // --- Utility Functions ---
-        function showLoading(message = "Loading...") { /* ... */ }
-        function clearLoading(message = "") { /* ... */ }
-        function showError(message, errorObj = null) { /* ... */ }
-        function hideError() { /* ... */ }
-        function resetStaggeringState() { /* ... */ }
-        function resetAutoStaggeringState() { /* ... */ }
-        function updateRemoveButtonsState() { /* ... */ }
-        function clearPlot() { /* ... */ }
+        function showLoading(message = "Loading...") { }
+        function clearLoading(message = "") { }
+        function showError(message, errorObj = null) { }
+        function hideError() { }
+        function resetStaggeringState() { }
+        function resetAutoStaggeringState() { }
+        function updateRemoveButtonsState() { }
+        function clearPlot(resetData = true) {  }
 
         // --- Utility Functions (Full Implementation) ---
         function showLoading(message = "Loading...") {
             statusDiv.innerHTML = `<div class="flex items-center justify-center text-blue-600"><div class="loader mr-2"></div><span>${message}</span></div>`;
-            // console.log("Loading:", message);
         }
         function clearLoading(message = "") {
-             statusDiv.innerHTML = message ? `<span class="text-green-600">${message}</span>` : '';
-             // if(message) console.log("Status:", message);
+            statusDiv.innerHTML = message ? `<span class="text-green-600">${message}</span>` : '';
         }
         function showError(message, errorObj = null) {
             errorMessage.textContent = message;
@@ -205,17 +204,15 @@
             errorBox.classList.add('hidden');
             errorMessage.textContent = '';
         }
-        function resetStaggeringState() { // For plot 1 manual markers
+        function resetStaggeringState() {
             lastMarkerPosition = { md: null, tvd: null };
             lastMarkerAyOffset = -40;
-            // console.log("Manual Marker staggering state reset.");
         }
-         function resetAutoStaggeringState() { // Reset state for plot 2 annotations
+        function resetAutoStaggeringState() {
             lastAutoMarkerPosition = { md: null, tvd: null };
             lastAutoMarkerAyOffset = -40;
-            // console.log("Auto-Marker staggering state reset.");
         }
-        function updateRemoveButtonsState() { // Only affects plot 1 markers
+        function updateRemoveButtonsState() {
             try {
                 const annotationsExist = currentLayout && Array.isArray(currentLayout.annotations) && currentLayout.annotations.length > 0;
                 removeLastMarkerButton.disabled = !annotationsExist;
@@ -224,44 +221,43 @@
                 console.error("Error updating remove button state:", err);
             }
         }
-        function clearPlot() {
-            // console.log("Clearing plots and resetting state.");
+        function clearPlot(resetData = true) {
             try {
                 if (plotInstance) Plotly.purge(plotDiv);
                 if (plotInstance2) Plotly.purge(plotDiv2);
-                // console.log("Plotly plots purged.");
             } catch (purgeError) {
                 console.error("Error purging Plotly plots:", purgeError);
             } finally {
                 plotDiv.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500">Upload an XLSX file to generate the plot.</div>`;
                 plotDiv2.innerHTML = `<div></div>`;
-                if(htmlPlotTitle) htmlPlotTitle.textContent = '';
-                if(htmlPlotTitle2) htmlPlotTitle2.textContent = '';
+                if (htmlPlotTitle) htmlPlotTitle.textContent = '';
+                if (htmlPlotTitle2) htmlPlotTitle2.textContent = '';
                 plotInstance = null;
                 plotInstance2 = null;
-                currentPlotData = { lineData: [], nearestPointsData: {}, dlsHighlightData: [], dlsSuperHighlightData: [], dlsRange: { min: null, max: null } };
-                currentLayout = {};
-                currentLayout2 = {};
+                if (resetData) {
+                    currentPlotData = { lineData: [], nearestPointsData: {}, dlsHighlightData: [], dlsSuperHighlightData: [], dlsRange: { min: null, max: null } };
+                    currentLayout = {};
+                    currentLayout2 = {};
+                    plotTitleInput.value = '';
+                }
                 titleSection.disabled = true;
                 markerSection.disabled = true;
-                if(printButton) printButton.disabled = true;
+                if (printButton) printButton.disabled = true;
                 markerStatus.textContent = '';
                 mdValueInput.value = '';
                 markerTextInput.value = '';
-                plotTitleInput.value = '';
                 resetStaggeringState();
-                resetAutoStaggeringState(); // Reset auto staggering
+                resetAutoStaggeringState();
                 updateRemoveButtonsState();
+                localStorage.removeItem('wellCompletionData');
             }
         }
 
-
         // --- Core Logic Functions ---
-
-        function processNsEw(value) { /* ... */ }
-        function findNearestPoints(data) { /* ... */ }
-        function processData(jsonData) { /* ... */ }
-        function createPlots(plotData, initialManualAnnotations = []) { /* ... */ }
+        function processNsEw(value) {  }
+        function findNearestPoints(data) {  }
+        function processData(jsonData) {  }
+        function createPlots(plotData, initialManualAnnotations = []) {  }
 
         // --- Core Logic Functions (Full Implementation) ---
         function processNsEw(value) {
@@ -277,7 +273,6 @@
             return directionMultiplier * number;
         }
         function findNearestPoints(data) {
-            // console.log("Finding nearest points...");
             const nearestTvdValues = [];
             const nearestMdValues = [];
             const hoverDepthValues = [];
@@ -311,14 +306,12 @@
                     hoverDepthValues.push(depth);
                     hoverPlugNumbers.push(plugNumber);
                 } else {
-                    // console.warn(`Could not find valid nearest MD row for Depth: ${depth}`);
+                    console.warn(`Could not find valid nearest MD row for Depth: ${depth}`);
                 }
             });
-            // console.log(`Found ${nearestMdValues.length} scatter points.`);
             return { nearestMdValues, nearestTvdValues, hoverDepthValues, hoverPlugNumbers };
         }
         function processData(jsonData) {
-            // console.log("Processing XLSX data (incl. DLS & Filtering)...");
             if (!jsonData || jsonData.length === 0) throw new Error("XLSX data is empty.");
 
             const firstRow = jsonData[0];
@@ -332,22 +325,22 @@
             let maxDLS = -Infinity;
 
             const processedData = jsonData.map((row, index) => {
-                 const tvd = parseFloat(row['TVD']);
-                 const md = parseFloat(row['MD']);
-                 const dls = parseFloat(row['DLS']);
+                const tvd = parseFloat(row['TVD']);
+                const md = parseFloat(row['MD']);
+                const dls = parseFloat(row['DLS']);
 
-                 if (isNaN(tvd) || isNaN(md) || isNaN(dls)) { return null; }
+                if (isNaN(tvd) || isNaN(md) || isNaN(dls)) { return null; }
 
-                 if (dls < minDLS) minDLS = dls;
-                 if (dls > maxDLS) maxDLS = dls;
+                if (dls < minDLS) minDLS = dls;
+                if (dls > maxDLS) maxDLS = dls;
 
-                 return {
+                return {
                     TVD: tvd, MD: md, DLS: dls,
                     Depth: hasScatterCols ? parseFloat(row['Depth']) : undefined,
                     'Plug #': hasScatterCols ? row['Plug #'] : undefined,
                     NS_numeric: row.hasOwnProperty('NS') ? processNsEw(String(row['NS'] || '')) : undefined,
                     EW_numeric: row.hasOwnProperty('EW') ? processNsEw(String(row['EW'] || '')) : undefined,
-                 };
+                };
             }).filter(row => row !== null);
 
             if (processedData.length === 0) throw new Error("No valid data rows found after processing (check TVD, MD, DLS columns).");
@@ -358,9 +351,7 @@
             const nearestPoints = hasScatterCols ? findNearestPoints(processedData) : { nearestMdValues: [], nearestTvdValues: [], hoverDepthValues: [], hoverPlugNumbers: [] };
             const dlsHighlightData = processedData.filter(row => row.DLS > 1);
             const dlsSuperHighlightData = processedData.filter(row => row.DLS > 5);
-            console.log(`Found ${dlsSuperHighlightData.length} points with DLS > 5 for annotations.`);
 
-            // console.log("Data processing complete. DLS range:", minDLS, maxDLS);
             return {
                 lineData: processedData,
                 nearestPointsData: nearestPoints || { nearestMdValues: [], nearestTvdValues: [], hoverDepthValues: [], hoverPlugNumbers: [] },
@@ -370,15 +361,14 @@
             };
         }
         function createPlots(plotData, initialManualAnnotations = []) {
-            // console.log("Attempting to create plots...");
             hideError();
             markerStatus.textContent = '';
             markerStatus.className = 'mt-1 text-xs text-gray-500 h-4';
 
             if (!plotData || !plotData.lineData || plotData.lineData.length === 0) {
-                 showError("Cannot create plots: No valid line data available.");
-                 console.error("createPlots called with invalid plotData:", plotData);
-                 return;
+                showError("Cannot create plots: No valid line data available.");
+                console.error("createPlots called with invalid plotData:", plotData);
+                return;
             }
             const { lineData, nearestPointsData, dlsHighlightData, dlsSuperHighlightData, dlsRange } = plotData;
             const yAxisMinLimit = 2620;
@@ -386,7 +376,6 @@
 
             // --- Plot 1: Main Plot (Well Path + Plugs) ---
             try {
-                // console.log("Creating Plot 1...");
                 const safeNearestPointsData = nearestPointsData && typeof nearestPointsData === 'object'
                     ? nearestPointsData
                     : { nearestMdValues: [], nearestTvdValues: [], hoverDepthValues: [], hoverPlugNumbers: [] };
@@ -402,7 +391,6 @@
                 });
                 // 1b. Plugs Scatter
                 if (nearestMdValues && nearestMdValues.length > 0) {
-                     console.log('Plot 1: Adding Plug # & Depth scatter trace with', nearestMdValues.length, 'points.');
                     traces1.push({
                         x: nearestMdValues, y: nearestTvdValues, mode: 'markers', type: 'scatter', name: 'Plug # & Depth',
                         marker: { color: 'black', size: 8, symbol: 'square' },
@@ -411,9 +399,8 @@
                         hovertemplate: '<b>Plug #: %{customdata[0]}</b><br>Depth: %{text} m<br>MD: %{x:.2f} m<br>TVD: %{y:.2f} m<extra></extra>'
                     });
                 } else {
-                     markerStatus.textContent = '(Note: "Plug # & Depth" data not found or invalid in file.)';
-                     markerStatus.className = 'mt-1 text-xs text-gray-500 h-4';
-                     console.log("Plot 1: No data for Plug # & Depth scatter trace.");
+                    markerStatus.textContent = '(Note: "Plug # & Depth" data not found or invalid in file.)';
+                    markerStatus.className = 'mt-1 text-xs text-gray-500 h-4';
                 }
 
                 // Calculate Axis Ranges for Plot 1
@@ -439,7 +426,7 @@
                     showlegend: true,
                     legend: { x: 1.02, y: 0, xanchor: 'left', yanchor: 'bottom' },
                     paper_bgcolor: 'rgb(249, 250, 251)', plot_bgcolor: 'rgb(249, 250, 251)',
-                    annotations: initialManualAnnotations // Use only manually added annotations
+                    annotations: initialManualAnnotations
                 };
                 currentLayout = layout1;
                 const displayTitle1 = plotTitleInput.value.trim() || 'Well Path and Completions';
@@ -447,34 +434,34 @@
                 // Render Plot 1
                 if (!plotDiv) throw new Error("Plot 1 container element not found.");
                 plotDiv.innerHTML = '';
-                Plotly.newPlot(plotDiv, traces1, currentLayout, {responsive: true}).then(gd => {
+                Plotly.newPlot(plotDiv, traces1, currentLayout, { responsive: true }).then(gd => {
                     plotInstance = gd;
-                    if(htmlPlotTitle) htmlPlotTitle.textContent = displayTitle1;
+                    if (htmlPlotTitle) htmlPlotTitle.textContent = displayTitle1;
                     plotTitleInput.value = displayTitle1;
                     titleSection.disabled = false; markerSection.disabled = false; updateRemoveButtonsState();
+                    localStorage.setItem('wellCompletionData', JSON.stringify({ plotData: currentPlotData, layout1: currentLayout, layout2: currentLayout2, title1: displayTitle1, title2: 'DLS > 1 Highlights' }));
                 }).catch(err => { throw err; });
 
             } catch (plot1Error) {
-                 console.error("Error creating Plot 1:", plot1Error);
-                 showError(`Failed to create main plot: ${plot1Error.message}`, plot1Error);
-                 clearPlot(); return;
+                console.error("Error creating Plot 1:", plot1Error);
+                showError(`Failed to create main plot: ${plot1Error.message}`, plot1Error);
+                clearPlot(); return;
             }
 
-             // --- Plot 2: DLS Highlights ---
+            // --- Plot 2: DLS Highlights ---
             try {
-                // console.log("Creating Plot 2 (DLS Highlights)...");
                 const traces2 = [];
-                const safeDlsRange = dlsRange && typeof dlsRange === 'object' && dlsRange.min != null && dlsRange.max != null ? dlsRange : { min: 0, max: 1};
-                resetAutoStaggeringState(); // Reset staggering for auto-annotations
-                const plot2Annotations = []; // Array for Plot 2's automatic annotations
+                const safeDlsRange = dlsRange && typeof dlsRange === 'object' && dlsRange.min != null && dlsRange.max != null ? dlsRange : { min: 0, max: 1 };
+                resetAutoStaggeringState();
+                const plot2Annotations = [];
 
-                 // 2a. Background Well Path
-                 traces2.push({
+                // 2a. Background Well Path
+                traces2.push({
                     x: lineData.map(row => row.MD), y: lineData.map(row => row.TVD),
                     mode: 'lines', type: 'scatter',
                     name: 'Well Path (BG)', hoverinfo: 'skip',
                     line: { color: '#D3D3D3', width: 8 }
-                 });
+                });
 
                 // 2b. DLS > 1 Diamond Markers
                 if (dlsHighlightData && dlsHighlightData.length > 0) {
@@ -510,7 +497,7 @@
                             bgcolor: 'rgba(255, 69, 0, 0.7)', bordercolor: '#cc3700',
                             font: { size: 9, color: 'white' }, borderwidth: 1
                         });
-                         lastAutoMarkerPosition = { md: positionMd, tvd: positionTvd }; lastAutoMarkerAyOffset = currentAy;
+                        lastAutoMarkerPosition = { md: positionMd, tvd: positionTvd }; lastAutoMarkerAyOffset = currentAy;
                     });
                 }
 
@@ -521,13 +508,20 @@
                 let yAxisRange2 = null; let useAutorangeReversed2 = true;
                 if (maxYtvd2 === -Infinity) { console.warn("Plot 2: No valid TVD data found."); }
                 else if (maxYtvd2 <= yAxisMinLimit) { console.warn(`Plot 2: All TVD data is >= ${yAxisMinLimit}. Using autorange reversed.`); }
-                else { const padding = (maxYtvd2 - yAxisMinLimit) * 0.05; yAxisRange2 = [maxYtvd2 + padding, yAxisMinLimit]; useAutorangeReversed2 = false; }
-                let minMd2 = Infinity; let maxMd2 = -Infinity;
+                else {
+                    const padding = (maxYtvd2 - yAxisMinLimit) * 0.05;
+                    yAxisRange2 = [maxYtvd2 + padding, yAxisMinLimit];
+                    useAutorangeReversed2 = false;
+                }let minMd2 = Infinity; let maxMd2 = -Infinity;
                 if (allMdValues2.length > 0) { minMd2 = Math.min(...allMdValues2); maxMd2 = Math.max(...allMdValues2); }
                 let xAxisRange2 = null; let useAutorangeX2 = true;
                 if (minMd2 === Infinity) { console.warn("Plot 2: No valid MD data found."); }
                 else if (minMd2 >= xAxisMinLimit) { console.warn(`Plot 2: All MD data is >= ${xAxisMinLimit}. Using autorange.`); }
-                else { const padding = (maxMd2 - xAxisMinLimit) * 0.05; xAxisRange2 = [xAxisMinLimit, maxMd2 + padding]; useAutorangeX2 = false; }
+                else {
+                    const padding = (maxMd2 - xAxisMinLimit) * 0.05;
+                    xAxisRange2 = [xAxisMinLimit, maxMd2 + padding];
+                    useAutorangeX2 = false;
+                }
 
                 // Layout for Plot 2
                 const layout2 = {
@@ -537,24 +531,22 @@
                     showlegend: true,
                     legend: { x: 1.02, y: 0, xanchor: 'left', yanchor: 'bottom' },
                     paper_bgcolor: 'rgb(249, 250, 251)', plot_bgcolor: 'rgb(249, 250, 251)',
-                    annotations: plot2Annotations // Add the generated annotations
+                    annotations: plot2Annotations
                 };
                 currentLayout2 = layout2;
                 const displayTitle2 = "DLS > 1 Highlights";
 
-                 // Render Plot 2
+                // Render Plot 2
                 if (traces2.length > 0) {
                     if (!plotDiv2) throw new Error("Plot 2 container element not found.");
                     plotDiv2.innerHTML = '';
-                    // console.log("Plot 2 Traces:", traces2); // Removed log
-                    // console.log("Plot 2 Layout:", layout2); // Removed log
-
-                    Plotly.newPlot(plotDiv2, traces2, currentLayout2, {responsive: true}).then(gd => {
+                    Plotly.newPlot(plotDiv2, traces2, currentLayout2, { responsive: true }).then(gd => {
                         plotInstance2 = gd;
-                        if(htmlPlotTitle2) htmlPlotTitle2.textContent = displayTitle2;
+                        if (htmlPlotTitle2) htmlPlotTitle2.textContent = displayTitle2;
+                        localStorage.setItem('wellCompletionData', JSON.stringify({ plotData: currentPlotData, layout1: currentLayout, layout2: currentLayout2, title1: displayTitle1, title2: displayTitle2 }));
                     }).catch(err => { throw err; });
                 } else {
-                     plotDiv2.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500 p-4">No data points found with DLS > 1.</div>`;
+                    plotDiv2.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500 p-4">No data points found with DLS > 1.</div>`;
                 }
 
             } catch (plot2Error) {
@@ -563,59 +555,56 @@
                 plotDiv2.innerHTML = `<div class="flex items-center justify-center h-full text-red-500 p-4">Failed to load DLS plot.</div>`;
             }
 
-            if(printButton) printButton.disabled = false; // Enable print button
+            if (printButton) printButton.disabled = false;
 
         }
 
         // --- Event Handlers ---
+        function handleFileSelect(event) {  }
+        function handleUpdateTitle() {  }
+        function handleAddMarker() {  }
+        function handleRemoveLastMarker() {  }
+        function handleRemoveAllMarkers() {  }
+        function handlePrint() {  }
 
-        function handleFileSelect(event) { /* ... */ }
-        function handleUpdateTitle() { /* ... */ }
-        function handleAddMarker() { /* ... */ }
-        function handleRemoveLastMarker() { /* ... */ }
-        function handleRemoveAllMarkers() { /* ... */ }
-        function handlePrint() { /* ... */ }
-
-        // --- Event Handlers (Full Implementation - Unchanged) ---
-         function handleFileSelect(event) {
-            // console.log("File selected."); // Removed
+        // --- Event Handlers (Full Implementation) ---
+        function handleFileSelect(event) {
             const file = event.target.files[0];
             clearPlot();
             hideError();
 
             if (!file) { return; }
             if (!file.name.endsWith('.xlsx')) {
-                 showError("Invalid file type. Please upload an .xlsx file.");
-                 fileInput.value = ''; return;
+                showError("Invalid file type. Please upload an .xlsx file.");
+                fileInput.value = ''; return;
             }
 
             showLoading("Reading file...");
             const reader = new FileReader();
-            reader.onload = function(e) {
+            reader.onload = function (e) {
                 try {
                     const fileData = e.target.result;
                     const workbook = XLSX.read(fileData, { type: 'binary' });
                     const firstSheetName = workbook.SheetNames[0];
                     const worksheet = workbook.Sheets[firstSheetName];
                     const jsonData = XLSX.utils.sheet_to_json(worksheet);
-                    // console.log("XLSX data read successfully."); // Removed
 
                     showLoading("Processing data...");
                     currentPlotData = processData(jsonData);
 
                     showLoading("Generating plots...");
-                    createPlots(currentPlotData, []); // Pass empty array for initial manual annotations
+                    createPlots(currentPlotData, []);
                     clearLoading("Plots generated successfully.");
-
+                    localStorage.setItem('wellCompletionData', JSON.stringify({ plotData: currentPlotData, layout1: currentLayout, layout2: currentLayout2, title1: plotTitleInput.value, title2: 'DLS > 1 Highlights' }));
                 } catch (error) {
-                    console.error("Error during file processing or plotting:", error); // Keep error log
+                    console.error("Error during file processing or plotting:", error);
                     showError(`Operation failed: ${error.message}`, error);
                     clearLoading();
                     clearPlot();
                 }
             };
-            reader.onerror = function(e) {
-                console.error("FileReader error:", e); // Keep error log
+            reader.onerror = function (e) {
+                console.error("FileReader error:", e);
                 showError("Error reading the file.", e);
                 clearLoading();
                 clearPlot();
@@ -623,25 +612,26 @@
             reader.readAsBinaryString(file);
         }
         function handleUpdateTitle() {
-            // console.log("Update Title button clicked."); // Removed
             if (!plotInstance) {
-                 showError("Plot 1 not generated yet."); return;
+                showError("Plot 1 not generated yet."); return;
             }
             const newTitle = plotTitleInput.value.trim();
-            // console.log("Attempting to update HTML title 1 to:", newTitle); // Removed
             if (htmlPlotTitle) {
                 htmlPlotTitle.textContent = newTitle;
-                // console.log("HTML title 1 updated."); // Removed
                 markerStatus.textContent = `Plot title updated.`;
                 markerStatus.className = 'mt-1 text-xs text-blue-600 h-4';
                 setTimeout(() => { if (markerStatus.textContent === 'Plot title updated.') markerStatus.textContent = ''; }, 3000);
+                if (localStorage.getItem('wellCompletionData')) {
+                    let savedData = JSON.parse(localStorage.getItem('wellCompletionData'));
+                    savedData.title1 = newTitle;
+                    localStorage.setItem('wellCompletionData', JSON.stringify(savedData));
+                }
             } else {
-                 console.error("HTML title 1 element not found."); // Keep error log
-                 showError("Could not find title 1 element to update.");
+                console.error("HTML title 1 element not found.");
+                showError("Could not find title 1 element to update.");
             }
         }
         function handleAddMarker() {
-            // console.log("Add Marker button clicked."); // Removed
             if (!plotInstance || !currentPlotData?.lineData?.length || !currentLayout) {
                 markerStatus.textContent = 'Load data and generate plot 1 first.';
                 markerStatus.className = 'mt-1 text-xs text-red-500 h-4'; return;
@@ -664,8 +654,8 @@
             });
 
             if (closestIndex === -1) {
-                 markerStatus.textContent = 'Could not find point on well path for the entered MD.';
-                 markerStatus.className = 'mt-1 text-xs text-red-500 h-4'; return;
+                markerStatus.textContent = 'Could not find point on well path for the entered MD.';
+                markerStatus.className = 'mt-1 text-xs text-red-500 h-4'; return;
             }
 
             const positionMd = lineData[closestIndex].MD;
@@ -688,19 +678,22 @@
             currentLayout.annotations.push(newAnnotation);
 
             Plotly.relayout(plotDiv, { annotations: currentLayout.annotations }).then(() => {
-                 // console.log("Annotation added to Plot 1."); // Removed
-                 lastMarkerPosition = { md: positionMd, tvd: positionTvd }; lastMarkerAyOffset = currentAy;
-                 markerStatus.textContent = `Marker added for MD: ${targetMd.toFixed(2)}m.`;
-                 markerStatus.className = 'mt-1 text-xs text-green-600 h-4';
-                 updateRemoveButtonsState();
+                lastMarkerPosition = { md: positionMd, tvd: positionTvd }; lastMarkerAyOffset = currentAy;
+                markerStatus.textContent = `Marker added for MD: ${targetMd.toFixed(2)}m.`;
+                markerStatus.className = 'mt-1 text-xs text-green-600 h-4';
+                updateRemoveButtonsState();
+                if (localStorage.getItem('wellCompletionData')) {
+                    let savedData = JSON.parse(localStorage.getItem('wellCompletionData'));
+                    savedData.layout1.annotations = currentLayout.annotations;
+                    localStorage.setItem('wellCompletionData', JSON.stringify(savedData));
+                }
             }).catch(err => {
-                 console.error("Plotly relayout error (add annotation):", err); // Keep error log
-                 showError(`Failed to add marker: ${err.message}`, err);
-                 currentLayout.annotations.pop(); updateRemoveButtonsState();
+                console.error("Plotly relayout error (add annotation):", err);
+                showError(`Failed to add marker: ${err.message}`, err);
+                currentLayout.annotations.pop(); updateRemoveButtonsState();
             });
         }
         function handleRemoveLastMarker() {
-            // console.log("Remove Last button clicked."); // Removed
             if (!plotInstance || !currentLayout || !Array.isArray(currentLayout.annotations) || currentLayout.annotations.length === 0) {
                 markerStatus.textContent = 'No markers to remove from Plot 1.';
                 markerStatus.className = 'mt-1 text-xs text-gray-500 h-4'; return;
@@ -708,35 +701,41 @@
             currentLayout.annotations.pop();
             resetStaggeringState();
             Plotly.relayout(plotDiv, { annotations: currentLayout.annotations }).then(() => {
-                 // console.log("Last annotation removed from Plot 1."); // Removed
-                 markerStatus.textContent = 'Last marker removed.';
-                 markerStatus.className = 'mt-1 text-xs text-blue-600 h-4';
-                 updateRemoveButtonsState();
+                markerStatus.textContent = 'Last marker removed.';
+                markerStatus.className = 'mt-1 text-xs text-blue-600 h-4';
+                updateRemoveButtonsState();
+                if (localStorage.getItem('wellCompletionData')) {
+                    let savedData = JSON.parse(localStorage.getItem('wellCompletionData'));
+                    savedData.layout1.annotations = currentLayout.annotations;
+                    localStorage.setItem('wellCompletionData', JSON.stringify(savedData));
+                }
             }).catch(err => {
-                 console.error("Plotly relayout error (remove last):", err); // Keep error log
-                 showError(`Failed to remove last marker: ${err.message}`, err);
+                console.error("Plotly relayout error (remove last):", err);
+                showError(`Failed to remove last marker: ${err.message}`, err);
             });
         }
         function handleRemoveAllMarkers() {
-            // console.log("Remove All button clicked."); // Removed
-             if (!plotInstance || !currentLayout || !Array.isArray(currentLayout.annotations) || currentLayout.annotations.length === 0) {
+            if (!plotInstance || !currentLayout || !Array.isArray(currentLayout.annotations) || currentLayout.annotations.length === 0) {
                 markerStatus.textContent = 'No markers to remove from Plot 1.';
                 markerStatus.className = 'mt-1 text-xs text-gray-500 h-4'; return;
-             }
-             currentLayout.annotations = [];
-             resetStaggeringState();
-             Plotly.relayout(plotDiv, { annotations: currentLayout.annotations }).then(() => {
-                 // console.log("All annotations removed from Plot 1."); // Removed
-                 markerStatus.textContent = 'All markers removed.';
-                 markerStatus.className = 'mt-1 text-xs text-blue-600 h-4';
-                 updateRemoveButtonsState();
-             }).catch(err => {
-                 console.error("Plotly relayout error (remove all):", err); // Keep error log
-                 showError(`Failed to remove all markers: ${err.message}`, err);
-             });
+            }
+            currentLayout.annotations = [];
+            resetStaggeringState();
+            Plotly.relayout(plotDiv, { annotations: currentLayout.annotations }).then(() => {
+                markerStatus.textContent = 'All markers removed.';
+                markerStatus.className = 'mt-1 text-xs text-blue-600 h-4';
+                updateRemoveButtonsState();
+                if (localStorage.getItem('wellCompletionData')) {
+                    let savedData = JSON.parse(localStorage.getItem('wellCompletionData'));
+                    savedData.layout1.annotations = currentLayout.annotations;
+                    localStorage.setItem('wellCompletionData', JSON.stringify(savedData));
+                }
+            }).catch(err => {
+                console.error("Plotly relayout error (remove all):", err);
+                showError(`Failed to remove all markers: ${err.message}`, err);
+            });
         }
         function handlePrint() {
-            // console.log("Print button clicked."); // Removed
             if (!plotInstance) {
                 showError("Please generate plots before printing.");
                 return;
@@ -744,9 +743,7 @@
             window.print();
         }
 
-
         // --- Initial Setup ---
-        // console.log("Adding initial event listeners."); // Removed
         fileInput.addEventListener('change', handleFileSelect, false);
         updateTitleButton.addEventListener('click', handleUpdateTitle, false);
         addMarkerButton.addEventListener('click', handleAddMarker, false);
@@ -758,8 +755,24 @@
         markerSection.disabled = true;
         printButton.disabled = true;
         updateRemoveButtonsState();
-        // console.log("Initial setup complete."); // Removed
 
+        // --- Load from Local Storage on initial load ---
+        if (localSavedData) {
+            try {
+                const savedData = JSON.parse(localSavedData);
+                if (savedData.plotData) {
+                    currentPlotData = savedData.plotData;
+                    currentLayout = savedData.layout1 || {};
+                    currentLayout2 = savedData.layout2 || {};
+                    plotTitleInput.value = savedData.title1 || '';
+                    const title2 = savedData.title2 || '';
+                    createPlots(currentPlotData, savedData.layout1?.annotations || []);
+                }
+            } catch (e) {
+                console.error("Error loading from local storage:", e);
+                localStorage.removeItem('wellCompletionData');
+            }
+        }
     </script>
 
 </body>
